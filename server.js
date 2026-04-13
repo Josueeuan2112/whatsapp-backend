@@ -3,6 +3,7 @@ const socketIO = require('socket.io');
 const cors = require('cors');
 const http = require('http');
 require('dotenv').config();
+const db = require('./db/init');
 
 const app = express();
 const server = http.createServer(app);
@@ -13,6 +14,10 @@ const io = socketIO(server, {
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Importar y usar rutas de autenticación
+const authRoutes = require('./routes/auth');
+app.use('/api/auth', authRoutes);
 
 // Para almacenar usuarios conectados
 const users = {};
@@ -27,8 +32,15 @@ io.on('connection', (socket) => {
     });
 });
 
+// Middleware para ver todas las peticiones
+app.use((req, res, next) => {
+    console.log(`📨 ${req.method} ${req.path}`);
+    next();
+});
+
 // Ruta de prueba
 app.get('/', (req, res) => {
+    console.log('✅ Alguien accedió a la ruta principal');
     res.json({ mensaje: 'Servidor funcionando correctamente' });
 });
 
