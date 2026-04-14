@@ -143,6 +143,13 @@ app.get('/', (req, res) => {
     res.json({ mensaje: 'Servidor funcionando correctamente' });
 });
 
+// Ruta de debug para verificar token
+app.get('/api/debug/check-token', (req, res) => {
+    const token = req.headers.authorization?.split(' ')[1];
+    console.log('🔍 Token recibido en /debug:', token ? token.substring(0, 20) + '...' : 'NO HAY TOKEN');
+    res.json({ token: token ? token.substring(0, 20) + '...' : 'No hay token' });
+});
+
 // Iniciar servidor
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
