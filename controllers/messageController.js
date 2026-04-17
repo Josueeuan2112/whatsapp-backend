@@ -67,4 +67,61 @@ const getUsers = (req, res) => {
     );
 };
 
-module.exports = { getMessages, saveMessage, getUsers };
+// Función para marcar mensajes como leídos
+const markMessagesAsRead = (req, res) => {
+    const { receiverId } = req.body;
+    const senderId = receiverId; // El que mandó los mensajes
+    const currentUserId = req.user.id; // El que está leyendo
+
+    console.log(`📖 Marcando mensajes como leídos de ${senderId} a ${currentUserId}`);
+
+    db.run(
+        'UPDATE messages SET is_read = 1 WHERE sender_id = ? AND receiver_id = ? AND is_read = 0',
+        [senderId, currentUserId],
+        function (err) {
+            if (err) {
+                console.error('Error marcando como leído:', err.message);
+                return res.status(500).json({ error: 'Error marcando como leído' });
+            }
+
+            console.log(`✅ ${this.changes} mensajes marcados como leídos`);
+            res.json({
+                mensaje: 'Mensajes marcados como leídos',
+                markedCount: this.changes,
+            });
+        }
+    );
+};
+
+// Función para obtener contador de mensajes no leídos
+const getUnreadCount = (req, res) => {
+    const userId = req.user.id;
+
+    console.log(`📊 Obteniendo contador de no leídos para usuario ${userId}`);
+
+    db.all(
+        `SELECT sender_id, COUNT(*) as count 
+     FROM messages 
+     WHERE receiver_id = ? AND is_read = 0 
+     GROUP BY sender_id`,
+        [userId],
+        (err, rows) => {
+            if (err) {
+                return res.status(500).json({ error: 'Error obteniendo contador' });
+            }
+
+            // Convertir a objeto: { userId: count }
+            const unreadCounts = {};
+            if (rows && rows.length > 0) {
+                rows.forEach(row => {
+                    unreadCounts[row.sender_id] = row.count;
+                });
+            }
+
+            console.log(`✅ Conteos de no leídos:`, unreadCounts);
+            res.json(unreadCounts);
+        }
+    );
+};
+
+module.exports = { getMessages, saveMessage, getUsers, markMessagesAsRead, getUnreadCount };
