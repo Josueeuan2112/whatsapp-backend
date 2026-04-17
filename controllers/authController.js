@@ -85,4 +85,100 @@ const login = (req, res) => {
     });
 };
 
-module.exports = { register, login };
+const updateUser = (req, res) => {
+    const { id } = req.params;
+    const { username, email } = req.body;
+
+    // Validación: el usuario solo puede actualizar su propio perfil
+    if (req.user.id !== parseInt(id)) {
+        return res.status(403).json({ error: 'No tienes permiso para actualizar este perfil' });
+    }
+
+    // Validar que no estén vacíos
+    if (!username || !email) {
+        return res.status(400).json({ error: 'Username y email son obligatorios' });
+    }
+
+    // Validar que el email tenga formato correcto (simple)
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+        return res.status(400).json({ error: 'Email no válido' });
+    }
+
+    console.log(`📝 Intentando actualizar usuario ID: ${id}`);
+
+    // Primero verificar si el email ya existe en otro usuario
+    db.get(
+        'SELECT id FROM users WHERE email = ? AND id != ?',
+        [email, id],
+        (err, existingUser) => {
+            if (err) {
+                return res.status(500).json({ error: 'Error en la base de datos' });
+            }
+
+            if (existingUser) {
+                return res.status(400).json({ error: 'Este email ya está en uso' });
+            }
+
+            // También verificar username
+            db.get(
+                'SELECT id FROM users WHERE username = ? AND id != ?',
+                [username, id],
+                (err, existingUsername) => {
+                    if (err) {
+                        return res.status(500).json({ error: 'Error en la base de datos' });
+                    }
+
+                    if (existingUsername) {
+                        return res.status(400).json({ error: 'Este username ya está en uso' });
+                    }
+
+                    // Actualizar el usuario
+                    db.run(
+                        'UPDATE users SET username = ?, email = ? WHERE id = ?',
+                        [username, email, id],
+                        function (err) {
+                            if (err) {
+                                console.error('❌ Error al actualizar usuario:', err.message);
+                                return res.status(500).json({ error: 'Error al actualizar perfil' });
+                            }
+
+                            console.log(`✅ Usuario ${id} actualizado - Nuevo username: ${username}`);
+                            res.json({
+                                mensaje: 'Perfil actualizado exitosamente',
+                                userId: id,
+                                username: username,
+                                email: email,
+                            });
+                        }
+                    );
+                }
+            );
+        }
+    );
+};
+
+const getUserProfile = (req, res) => {
+    const { id } = req.params;
+
+    console.log(`📖 Obteniendo perfil del usuario ID: ${id}`);
+
+    db.get(
+        'SELECT id, username, email, status, created_at FROM users WHERE id = ?',
+        [id],
+        (err, user) => {
+            if (err) {
+                return res.status(500).json({ error: 'Error en la base de datos' });
+            }
+
+            if (!user) {
+                return res.status(404).json({ error: 'Usuario no encontrado' });
+            }
+
+            console.log(`✅ Perfil obtenido: ${user.username}`);
+            res.json(user);
+        }
+    );
+};
+
+module.exports = { register, login, updateUser, getUserProfile };
