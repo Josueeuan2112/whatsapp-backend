@@ -38,6 +38,27 @@ const saveMessage = (senderId, receiverId, content, callback) => {
     );
 };
 
+// Función para guardar mensaje con imagen
+const saveImageMessage = (senderId, receiverId, imageUrl, callback) => {
+    db.run(
+        'INSERT INTO messages (sender_id, receiver_id, content, message_type) VALUES (?, ?, ?, ?)',
+        [senderId, receiverId, imageUrl, 'image'],
+        function (err) {
+            if (err) {
+                console.error('Error al guardar imagen:', err.message);
+                if (callback) callback(err);
+                return;
+            }
+            console.log(`✅ Imagen guardada - De ${senderId} a ${receiverId}`);
+            if (callback) callback(null, {
+                id: this.lastID,
+                timestamp: new Date(),
+                type: 'image'
+            });
+        }
+    );
+};
+
 // Función para obtener todos los usuarios
 const getUsers = (req, res) => {
     console.log('📥 PETICIÓN GET /api/messages recibida');
@@ -124,4 +145,11 @@ const getUnreadCount = (req, res) => {
     );
 };
 
-module.exports = { getMessages, saveMessage, getUsers, markMessagesAsRead, getUnreadCount };
+module.exports = {
+    getMessages,
+    saveMessage,
+    getUsers,
+    markMessagesAsRead,
+    getUnreadCount,
+    saveImageMessage
+};

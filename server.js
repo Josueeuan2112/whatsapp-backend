@@ -2,8 +2,10 @@ const express = require('express');
 const socketIO = require('socket.io');
 const cors = require('cors');
 const http = require('http');
+const path = require('path');
 require('dotenv').config();
 const db = require('./db/init');
+
 
 const app = express();
 const server = http.createServer(app);
@@ -14,6 +16,9 @@ const io = socketIO(server, {
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Servir carpeta de uploads como archivos estáticos
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Importar y usar rutas de autenticación
 const authRoutes = require('./routes/auth');
@@ -27,7 +32,7 @@ app.use('/api/messages', messageRoutes);
 const users = {};
 
 const { verifySocketToken } = require('./middleware/auth');
-const { saveMessage } = require('./controllers/messageController');
+const { saveMessage, saveImageMessage } = require('./controllers/messageController');
 
 // Almacenar usuarios conectados: { userId: socketId }
 const connectedUsers = {};
@@ -97,6 +102,51 @@ io.on('connection', (socket) => {
             // Si el receptor está conectado, enviarle el mensaje
             if (connectedUsers[receiverId]) {
                 io.to(connectedUsers[receiverId]).emit('receive_message', message);
+            }
+        });
+    });
+
+    // Evento para enviar una imagen
+    socket.on('send_image', (data) => {
+        const { receiverId, imageUrl } = data;
+        const senderId = socket.userId;
+
+        if (!senderId || !imageUrl) {
+            socket.emit('error', { message: 'Datos incompletos' });
+            return;
+        }
+
+        console.log(`🖼️ Imagen de ${senderId} a ${receiverId}`);
+
+        // Guardar la imagen en la base de datos
+        saveImageMessage(senderId, receiverId, imageUrl, (err, result) => {
+            if (err) {
+                socket.emit('error', { message: 'Error al guardar imagen' });
+                return;
+            }
+
+            // Crear el objeto del mensaje con imagen
+            const imageMessage = {
+                id: result.id,
+                sender_id: senderId,
+                receiver_id: receiverId,
+                content: imageUrl,
+                message_type: 'image',
+                timestamp: result.timestamp,
+                is_read: 0
+            };
+
+            console.log(`✅ Imagen guardada y enviada`);
+
+            // Enviar confirmación al remitente
+            socket.emit('message_sent', {
+                success: true,
+                message: imageMessage
+            });
+
+            // Si el receptor está conectado, enviarle la imagen
+            if (connectedUsers[receiverId]) {
+                io.to(connectedUsers[receiverId]).emit('receive_message', imageMessage);
             }
         });
     });
