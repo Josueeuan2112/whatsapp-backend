@@ -28,6 +28,10 @@ app.use('/api/auth', authRoutes);
 const messageRoutes = require('./routes/messages');
 app.use('/api/messages', messageRoutes);
 
+// Importar y usar rutas de grupos
+const groupRoutes = require('./routes/groups');
+app.use('/api/groups', groupRoutes);
+
 // Para almacenar usuarios conectados
 const users = {};
 
@@ -148,6 +152,174 @@ io.on('connection', (socket) => {
             if (connectedUsers[receiverId]) {
                 io.to(connectedUsers[receiverId]).emit('receive_message', imageMessage);
             }
+        });
+    });
+
+    // ==========================================
+    // EVENTOS PARA CHATS GRUPALES
+    // ==========================================
+
+    // Usuario se une a una sala de grupo
+    socket.on('join_group', (data) => {
+        const { groupId, userId } = data;
+
+        console.log(`👥 Usuario ${userId} se unió al grupo ${groupId}`);
+
+        // Agregar socket a la sala del grupo
+        socket.join(`group_${groupId}`);
+
+        // Notificar a otros en el grupo
+        io.to(`group_${groupId}`).emit('user_joined_group', {
+            groupId: groupId,
+            userId: userId,
+            message: `Usuario ${userId} se unió`,
+        });
+    });
+
+    // Usuario envía mensaje al grupo
+    socket.on('send_group_message', (data) => {
+        const { groupId, content } = data;
+        const senderId = socket.userId;
+
+        if (!senderId || !content) {
+            socket.emit('error', { message: 'Datos incompletos' });
+            return;
+        }
+
+        console.log(`💬 Mensaje de grupo - Usuario ${senderId} en grupo ${groupId}`);
+
+        // Guardar mensaje en la base de datos
+        const { saveMessage } = require('./controllers/messageController');
+
+        // Reutilizar saveMessage pero con group_id
+        db.run(
+            'INSERT INTO messages (sender_id, receiver_id, group_id, content, message_type) VALUES (?, ?, ?, ?, ?)',
+            [senderId, null, groupId, content, 'text'],
+            function (err) {
+                if (err) {
+                    console.error('❌ Error al guardar mensaje de grupo:', err.message);
+                    socket.emit('error', { message: 'Error al guardar mensaje' });
+                    return;
+                }
+
+                console.log(`✅ Mensaje de grupo guardado - ID: ${this.lastID}`);
+
+                // Crear objeto del mensaje
+                const message = {
+                    id: this.lastID,
+                    sender_id: senderId,
+                    receiver_id: null,
+                    group_id: groupId,
+                    content: content,
+                    message_type: 'text',
+                    timestamp: new Date(),
+                    is_read: 0,
+                };
+
+                // Enviar confirmación al remitente
+                socket.emit('message_sent', {
+                    success: true,
+                    message: message,
+                });
+
+                // Enviar mensaje a TODOS en la sala del grupo
+                io.to(`group_${groupId}`).emit('receive_message', message);
+            }
+        );
+    });
+
+    // Usuario envía imagen al grupo
+    socket.on('send_group_image', (data) => {
+        const { groupId, imageUrl } = data;
+        const senderId = socket.userId;
+
+        if (!senderId || !imageUrl) {
+            socket.emit('error', { message: 'Datos incompletos' });
+            return;
+        }
+
+        console.log(`🖼️ Imagen de grupo - Usuario ${senderId} en grupo ${groupId}`);
+
+        // Guardar imagen en la base de datos
+        db.run(
+            'INSERT INTO messages (sender_id, receiver_id, group_id, content, message_type) VALUES (?, ?, ?, ?, ?)',
+            [senderId, null, groupId, imageUrl, 'image'],
+            function (err) {
+                if (err) {
+                    console.error('❌ Error al guardar imagen de grupo:', err.message);
+                    socket.emit('error', { message: 'Error al guardar imagen' });
+                    return;
+                }
+
+                console.log(`✅ Imagen de grupo guardada`);
+
+                // Crear objeto del mensaje
+                const imageMessage = {
+                    id: this.lastID,
+                    sender_id: senderId,
+                    receiver_id: null,
+                    group_id: groupId,
+                    content: imageUrl,
+                    message_type: 'image',
+                    timestamp: new Date(),
+                    is_read: 0,
+                };
+
+                // Enviar confirmación al remitente
+                socket.emit('message_sent', {
+                    success: true,
+                    message: imageMessage,
+                });
+
+                // Enviar imagen a TODOS en el grupo
+                io.to(`group_${groupId}`).emit('receive_message', imageMessage);
+            }
+        );
+    });
+
+    // Usuario está escribiendo en grupo
+    socket.on('group_typing', (data) => {
+        const { groupId, username } = data;
+        const userId = socket.userId;
+
+        console.log(`✏️ ${username} está escribiendo en grupo ${groupId}`);
+
+        // Enviar a otros en el grupo (excepto al que escribe)
+        socket.to(`group_${groupId}`).emit('user_typing_group', {
+            groupId: groupId,
+            userId: userId,
+            username: username,
+        });
+    });
+
+    // Usuario deja de escribir en grupo
+    socket.on('group_stop_typing', (data) => {
+        const { groupId } = data;
+        const userId = socket.userId;
+
+        console.log(`⏹️ Usuario ${userId} dejó de escribir en grupo ${groupId}`);
+
+        // Notificar a otros
+        socket.to(`group_${groupId}`).emit('user_stop_typing_group', {
+            groupId: groupId,
+            userId: userId,
+        });
+    });
+
+    // Usuario se retira de una sala de grupo
+    socket.on('leave_group', (data) => {
+        const { groupId, userId } = data;
+
+        console.log(`👋 Usuario ${userId} salió del grupo ${groupId}`);
+
+        // Remover socket de la sala
+        socket.leave(`group_${groupId}`);
+
+        // Notificar a otros en el grupo
+        io.to(`group_${groupId}`).emit('user_left_group', {
+            groupId: groupId,
+            userId: userId,
+            message: `Usuario ${userId} salió`,
         });
     });
 

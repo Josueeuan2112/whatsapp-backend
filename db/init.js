@@ -70,5 +70,54 @@ db.run(`
     }
 });
 
+// Crear tabla de grupos
+db.run(`
+  CREATE TABLE IF NOT EXISTS groups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    admin_id INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(admin_id) REFERENCES users(id)
+  )
+`, (err) => {
+    if (err) {
+        console.error('❌ Error creando tabla groups:', err.message);
+    } else {
+        console.log('✅ Tabla groups lista');
+    }
+});
+
+// Crear tabla de miembros del grupo
+db.run(`
+  CREATE TABLE IF NOT EXISTS group_members (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(group_id, user_id),
+    FOREIGN KEY(group_id) REFERENCES groups(id),
+    FOREIGN KEY(user_id) REFERENCES users(id)
+  )
+`, (err) => {
+    if (err) {
+        console.error('❌ Error creando tabla group_members:', err.message);
+    } else {
+        console.log('✅ Tabla group_members lista');
+    }
+});
+
+// Actualizar tabla de mensajes para soportar grupos
+db.run(`
+  ALTER TABLE messages ADD COLUMN group_id INTEGER
+`, (err) => {
+    if (err && !err.message.includes('duplicate column')) {
+        console.error('⚠️ Nota sobre ALTER TABLE:', err.message);
+    } else if (!err || err.message.includes('duplicate column')) {
+        console.log('✅ Tabla messages actualizada (group_id agregado)');
+    }
+});
+
+
 // Exportar la conexión para usarla en otros archivos
 module.exports = db;
